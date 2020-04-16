@@ -5,6 +5,7 @@ import numpy as np
 import pyaudio
 import time
 import tensorflow.compat.v1 as tf
+import collections
 
 
 
@@ -13,9 +14,10 @@ class TFLiteStream():
                  path_model = './model/E2E_1stage_v5/tflite_non_stream', 
                  name_model = 'non_stream.tflite', 
                  sample_rate = 16000,
-                 chunk_duration = 0.75,
+                 chunk_duration = 0.08,
                  feed_duration = 1.0,
-                 channels = 1):
+                 channels = 1,
+                 threshold = 0.5):
         
         argumentList = sys.argv
    
@@ -28,8 +30,13 @@ class TFLiteStream():
         #chunk_duration -- time in second of a chunk
         if(len(argumentList) == 2):
             self.chunk_duration = float(sys.argv[1])
+            self.threshold = threshold
+        elif(len(argumentList) == 3):
+            self.chunk_duration = float(sys.argv[1])
+            self.threshold = float(sys.argv[2])
         else:
             self.chunk_duration = chunk_duration
+            self.threshold = threshold
            
         # chanels of audio
         self.channels = channels
@@ -63,15 +70,11 @@ class TFLiteStream():
         
         assert float(self.feed_duration/self.chunk_duration) == float(self.feed_duration/self.chunk_duration)
         
+        
+        self.stream = True
+        
     def run(self):
         
-        # Start a new TensorFlow session.
-        tf.reset_default_graph()
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        tf.keras.backend.set_session(sess)
-    
         
         # callback method
         def audio_callback(in_data, frame_count, time_info, status):
@@ -95,20 +98,42 @@ class TFLiteStream():
             channels=self.channels,
             rate=self.sample_rate,
             frames_per_buffer=self.chunk_samples,
-            stream_callback=audio_callback)       
+            stream_callback=audio_callback)
+                   
+        size_predicts = int(int(self.feed_duration / self.chunk_duration))
+        predictions = np.zeros([size_predicts])
         
         try: 
-            while True:
-                
-                data = self.q.get()
-                                        
-                predictions = self.predict(data)
+            while self.stream:
             
-                message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + predictions
+                current_time = time.time()
+                                
+                for i in range(size_predicts):
+                    data = self.q.get()
+                    predictions[i] = self.predict(data)
+                    
+                counter_predictions = collections.Counter(predictions)
                 
+                predictions[:size_predicts] = 0
+                
+                keymax_predictions = max(counter_predictions, key = counter_predictions.get)
+                
+                precision = counter_predictions[keymax_predictions] / size_predicts
+                
+                if(precision >= self.threshold):
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[int(keymax_predictions)] + "(p: %0.2f)"% (precision)
+                else:
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[1] 
                 print(message)
+                
+                lastprocessing_time = time.time()
+                remain_time = lastprocessing_time - current_time
+                if(remain_time < self.feed_duration):
+                    time.sleep(remain_time)                
                        
         except (KeyboardInterrupt, SystemExit):
+        
+            self.stream = False
             # Stop and close the stream 
             self.stream_in.stop_stream()
             self.stream_in.close()
@@ -153,12 +178,11 @@ class TFLiteStream():
             
             out_tflite_argmax = np.argmax(out_tflite)
             
-        
+            return out_tflite_argmax
             
-            return self.labels[out_tflite_argmax] 
-            
-        except(AssertionError):            
-            return "Error"     
+        except(AssertionError):
+            self.stream = False            
+            return -1        
         
         
         
