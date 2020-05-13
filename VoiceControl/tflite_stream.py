@@ -1,23 +1,36 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue May 12 20:10:00 2020
+
+@author: thorius
+"""
 import os
 import sys
 from queue import Queue
 import numpy as np
+import logging
 import pyaudio
 import time
-import tensorflow.compat.v1 as tf
+from tflite_runtime.interpreter import Interpreter
 import collections
 
 
 
-class TFLiteStream():
+class StreamControl():
     def __init__(self, 
-                 path_model = './model/E2E_1stage_v5/tflite_non_stream', 
+                 path_model = './model/E2E_1stage_v8/tflite_non_stream', 
                  name_model = 'non_stream.tflite', 
                  sample_rate = 16000,
                  chunk_duration = 0.08,
                  feed_duration = 1.0,
                  channels = 1,
-                 threshold = 0.5):
+                 threshold = 0.5,
+                 time_out = 8):
+        
+        
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
         
         argumentList = sys.argv
    
@@ -37,7 +50,8 @@ class TFLiteStream():
         else:
             self.chunk_duration = chunk_duration
             self.threshold = threshold
-           
+        
+        # times for ru   
         # chanels of audio
         self.channels = channels
         
@@ -62,7 +76,7 @@ class TFLiteStream():
         
         
         
-        with open(os.path.join('./model', 'labels.txt'), 'r') as fd:
+        with open(os.path.join(path_model, 'labels.txt'), 'r') as fd:
             labels_txt = fd.read()
         
         self.labels = labels_txt.split()
@@ -124,7 +138,7 @@ class TFLiteStream():
                     message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[int(keymax_predictions)] + "(p: %0.2f)"% (precision)
                 else:
                     message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[1] 
-                print(message)
+                logging.info(message)
                 
                 lastprocessing_time = time.time()
                 remain_time = lastprocessing_time - current_time
@@ -157,7 +171,7 @@ class TFLiteStream():
             with open(os.path.join(self.path_model, self.name_model), 'rb') as f:
                 model_content = f.read()
             
-            interpreter = tf.lite.Interpreter(model_content=model_content)
+            interpreter = Interpreter(model_content=model_content)
             interpreter.allocate_tensors()
             
             input_details = interpreter.get_input_details()
@@ -189,7 +203,7 @@ class TFLiteStream():
 
 
 def main():
-    run_stream = TFLiteStream()
+    run_stream = StreamControl()
     run_stream.run()
 
 if __name__ == '__main__':

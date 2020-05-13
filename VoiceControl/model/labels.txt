@@ -1,9 +1,0 @@
-_silence_
-_unknown_
-on
-off
-zero
-one
-two
-three
-four
