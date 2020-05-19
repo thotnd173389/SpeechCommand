@@ -23,12 +23,12 @@ class SpeechCommand():
                  path_activate_model = './VoiceActivate/model/keyword_marvin_v3/tflite_non_stream',
                  path_control_model = './VoiceControl/model/E2E_1stage_v8/tflite_non_stream', 
                  sample_rate = 16000,
-                 chunk_duration = 0.1,
+                 chunk_duration = 0.25,
                  feed_duration = 1.0,
                  channels = 1,
-                 activate_threshold = 0.8,
-                 control_threshold = 0.7,
-                 control_time = 5):
+                 activate_threshold = 0.5,
+                 control_threshold = 0.5,
+                 control_time = 3):
         
         # create logger to debug
         self.logger = logging.getLogger()
@@ -43,6 +43,10 @@ class SpeechCommand():
         
         # sample of audio signal
         self.sample_rate = sample_rate
+        
+        
+        #
+        self.device_sample_rate = 44100
         
         
         #chunk_duration -- time in second of a chunk
@@ -66,8 +70,8 @@ class SpeechCommand():
         
         
         
-        self.chunk_samples = int(self.sample_rate * self.chunk_duration)
-        self.feed_samples = int(self.sample_rate * self.feed_duration)
+        self.chunk_samples = int(self.device_sample_rate * self.chunk_duration)
+        self.feed_samples = int(self.device_sample_rate * self.feed_duration)
         
         
         
@@ -129,7 +133,7 @@ class SpeechCommand():
             input=True, output=False,
             format=pyaudio.paInt16,
             channels=self.channels,
-            rate=self.sample_rate,
+            rate=self.device_sample_rate,
             frames_per_buffer=self.chunk_samples,
             stream_callback=audio_callback)
         
@@ -155,6 +159,7 @@ class SpeechCommand():
                 activate_precision, keymax_activate_predictions = self.getBestPredict(activate_predictions, size_predicts)
                 
                 # if best_precision is greater then threshold for activate word and keymax = 2 - word = marvin
+                logging.info("Listening")
                 if(activate_precision >= self.activate_threshold and keymax_activate_predictions == 2):
                     logging.info("HI SIR!")
                     
@@ -187,6 +192,7 @@ class SpeechCommand():
                         logging.info(message)
                         if time.time() > timeout:
                             break
+
                         
         except (KeyboardInterrupt, SystemExit):
             self.stream = False

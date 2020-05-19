@@ -16,6 +16,7 @@ import pyaudio
 import time
 from tflite_runtime.interpreter import Interpreter
 import collections
+from scipy import signal
 
 
 
@@ -24,7 +25,7 @@ class StreamActivate():
                  path_model = './model/keyword_marvin_v3/tflite_non_stream', 
                  name_model = 'non_stream.tflite', 
                  sample_rate = 16000,
-                 chunk_duration = 0.08,
+                 chunk_duration = 0.25,
                  feed_duration = 1.0,
                  channels = 1,
                  threshold = 0.7,
@@ -60,10 +61,13 @@ class StreamActivate():
         #feed_duration -- time in second of the input to model
         self.feed_duration = feed_duration
         
+        #
+        self.device_sample_rate = 44100
         
         
-        self.chunk_samples = int(self.sample_rate * self.chunk_duration)
-        self.feed_samples = int(self.sample_rate * self.feed_duration)
+        
+        self.chunk_samples = int(self.device_sample_rate * self.chunk_duration)
+        self.feed_samples = int(self.device_sample_rate * self.feed_duration)
         
         
         
@@ -112,7 +116,7 @@ class StreamActivate():
             input=True, output=False,
             format=pyaudio.paInt16,
             channels=self.channels,
-            rate=self.sample_rate,
+            rate=self.device_sample_rate,
             frames_per_buffer=self.chunk_samples,
             stream_callback=audio_callback)
                    
@@ -164,6 +168,9 @@ class StreamActivate():
         try:
             data = np.array(data, np.float32)
             data = np.expand_dims(data, axis = 0)
+            
+            data = signal.resample(data, self.sample_rate, axis = 1)
+            
             assert data.shape == (1, 16000)
             # Normalize short ints to floats in range [-1..1).
             #data = data / float(np.max(np.absolute(data)))
