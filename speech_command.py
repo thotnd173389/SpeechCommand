@@ -15,19 +15,21 @@ import time
 import collections
 from VoiceActivate.tflite_stream import StreamActivate
 from VoiceControl.tflite_stream import StreamControl
+from play_video import PlayVideo
 
 
 
 class SpeechCommand():
     def __init__(self,
-                 path_activate_model = './VoiceActivate/model/keyword_marvin_v3/tflite_non_stream',
-                 path_control_model = './VoiceControl/model/E2E_1stage_v8/tflite_non_stream', 
+                 path_activate_model = './VoiceActivate/model/keyword_marvin_v3_vl_0_4/tflite_non_stream',
+                 path_control_model = './VoiceControl/model/E2E_1stage_v8_vl_0_4/tflite_non_stream',
                  sample_rate = 16000,
-                 chunk_duration = 0.25,
+                 chunk_duration = 0.08,
                  feed_duration = 1.0,
                  channels = 1,
-                 activate_threshold = 0.5,
-                 control_threshold = 0.5,
+                 activate_threshold = 0.76,
+                 control_threshold = 0.6,
+                 silence_threshold = 50,
                  control_time = 3):
         
         # create logger to debug
@@ -100,10 +102,18 @@ class SpeechCommand():
                                       threshold = self.control_threshold)
         
         
+        self.silence_threshold = silence_threshold
+        
+        
         assert float(self.feed_duration/self.chunk_duration) == float(self.feed_duration/self.chunk_duration)
         
         
+        
+        
         self.stream = True
+        
+        
+        self.run_vd = PlayVideo()
         
     def run(self):
         
@@ -113,6 +123,12 @@ class SpeechCommand():
             
             # get data from buffer
             data0 = np.frombuffer(in_data, dtype='int16')
+            
+            '''
+            if np.abs(data0).mean() < self.silence_threshold:
+                return (in_data, pyaudio.paContinue)
+                
+            '''
             
             # append data from buffer to data
             self.data = np.append(self.data,data0)
@@ -145,7 +161,13 @@ class SpeechCommand():
         activate_predictions = np.zeros([size_predicts])
         control_predictions = np.zeros([size_predicts])
         
+        
+        control_list, channel_list = self.run_vd.setDefaultList()
+        
+        self.run_vd.settings()
+        
         try:
+            
             
             while self.stream:
                 
@@ -184,8 +206,35 @@ class SpeechCommand():
                         
                         if(control_precision >= self.control_threshold):
                             message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
-                                                                                                 self.voice_control.labels[int(keymax_control_predictions)] + 
+                                                                                                 self.voice_control.labels[keymax_control_predictions] + 
                                                                                                  "(p: %0.2f)"% (control_precision))
+                            
+                            if(keymax_control_predictions >= 2):
+                                
+                                current_channel = self.run_vd.getIndexChannel(channel_list)
+                                
+                                
+                                control_list, channel_list = self.run_vd.setControlList(control_list, channel_list, keymax_control_predictions)
+                                
+                                new_channel = self.run_vd.getIndexChannel(channel_list)
+                                logging.info("channel: " + str(new_channel))
+                                
+                                if control_list[1] == 1:
+                                    self.run_vd.stopPlayVideo()
+                                elif (current_channel != new_channel and control_list[0] == 1):
+                                    self.run_vd.stopPlayVideo()
+                                    self.run_vd.setChannel(new_channel)
+                                    
+                                    self.run_vd.setConfig()
+                                    self.run_vd.startPlayVideo()
+                                else:
+                                    continue
+                                    
+                                
+                                
+                                
+                                
+                                
                         else:
                             message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
                                                                                                  self.voice_control.labels[1])
@@ -201,7 +250,7 @@ class SpeechCommand():
             self.stream_in.close()
             
             # Terminate the PortAudio interface
-            self.audio.terminate
+            self.audio.terminate()
     
     
     def getBestPredict(self, predictions, size_predicts):
@@ -215,7 +264,14 @@ class SpeechCommand():
         # compute precision
         precision = counter_predictions[keymax_predictions] / size_predicts
         
-        return precision, keymax_predictions
+        return precision, int(keymax_predictions)
+    
+    
+    
+        
+    
+
+        
 
 
 

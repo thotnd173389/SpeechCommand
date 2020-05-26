@@ -160,7 +160,7 @@ class StreamActivate():
             self.stream_in.close()
             
             # Terminate the PortAudio interface
-            self.audio.terminate
+            self.audio.terminate()
        
         
     def predict(self, data):
