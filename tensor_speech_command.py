@@ -183,17 +183,24 @@ class TfSpeechCommand():
                             
                             current_channel = self.run_vd.getIndexChannel(channel_list)
                             
+                            prev_control_status = control_list[0]
                             
                             control_list, channel_list = self.run_vd.setControlList(control_list, channel_list, control_predicted_label)
                             
                             new_channel = self.run_vd.getIndexChannel(channel_list)
                             logging.info("channel: " + str(new_channel))
                             
-                            if control_list[1] == 1:
+                            if control_list[0] == 0:
                                 self.run_vd.stopPlayVideo()
-                            elif (current_channel != new_channel and control_list[0] == 1):
-                                self.run_vd.stopPlayVideo()
-                                self.run_vd.setChannel(new_channel)
+                            else:
+                                if current_channel != new_channel:
+
+                                    self.run_vd.stopPlayVideo()
+                                    self.run_vd.setChannel(new_channel)
+                                elif prev_control_status == 0:
+                                    self.run_vd.setChannel(current_channel)
+                                else:
+                                    break
                                 
                                 self.run_vd.setConfig()
                                 self.run_vd.startPlayVideo()

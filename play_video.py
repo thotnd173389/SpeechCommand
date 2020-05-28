@@ -61,10 +61,8 @@ class PlayVideo():
         
         if keymax_control_predictions == 2:
             control_list[0] = 1
-            control_list[1] = 0
         elif keymax_control_predictions == 3:
             control_list[0] = 0
-            control_list[1] = 1
             
         elif keymax_control_predictions == 4:
             channel_list[currentChannel] = 0
@@ -86,7 +84,7 @@ class PlayVideo():
     
     
     def setDefaultList(self):
-        control_list = [1, 0]
+        control_list = [1]
         channel_list = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         
         
