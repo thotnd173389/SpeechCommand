@@ -16,16 +16,18 @@ import collections
 from VoiceActivate.tf_stream import StreamActivate
 from VoiceControl.tf_stream import StreamControl
 import tensorflow as tf
+from play_video import PlayVideo
 
 
 
 class TfSpeechCommand():
     def __init__(self,
-                 path_activate_model = './VoiceActivate/model/keyword_marvin_v3/non_stream',
-                 path_control_model = './VoiceControl/model/E2E_1stage_v8/non_stream', 
+                 path_activate_model = './VoiceActivate/model/keyword_marvin_v2/non_stream',
+                 path_control_model = './VoiceControl/model/E2E_1stage_v8_vl_0_4/non_stream', 
                  sample_rate = 16000,
-                 chunk_duration = 0.08,
-                 feed_duration = 1.0,
+                 chunk_duration = 0.8,
+                 activate_feed_duration = 3.0,
+                 control_feed_duration = 1.0,
                  channels = 1,
                  activate_threshold = 0.6,
                  control_threshold = 0.6,
@@ -67,45 +69,42 @@ class TfSpeechCommand():
         
         
         #feed_duration -- time in second of the input to model
-        self.feed_duration = feed_duration
+        self.activate_feed_duration = activate_feed_duration
+        self.control_feed_duration = control_feed_duration
         
         
         
         self.chunk_samples = int(self.device_sample_rate * self.chunk_duration)
-        self.feed_samples = int(self.device_sample_rate * self.feed_duration)
         
         
+
         
-        # Queue to communiate between the audio callback and main thread
-        self.q = Queue()
-        
-        
-        # Data buffer for the input wavform
-        self.data = np.zeros(self.feed_samples, dtype='int16')
         
         
         # create voice_activate object
         self.voice_activate = StreamActivate(path_model = self.path_activate_model,
                                         sample_rate = self.sample_rate,
                                         chunk_duration = self.chunk_duration,
-                                        feed_duration = self.feed_duration,
+                                        feed_duration = self.activate_feed_duration,
                                         channels = self.channels,
                                         threshold = self.activate_threshold)
+                                    
         
         # create voice_control object
         self.voice_control = StreamControl(path_model = self.path_control_model,
                                       sample_rate = self.sample_rate,
                                       chunk_duration = self.chunk_duration,
-                                      feed_duration = self.feed_duration,
+                                      feed_duration = self.control_feed_duration,
                                       channels = self.channels,
                                       threshold = self.control_threshold)
-        
-        
-        assert float(self.feed_duration/self.chunk_duration) == float(self.feed_duration/self.chunk_duration)
+
         
         
         self.stream = True
         
+        self.new_trigger = False
+
+        self.run_vd = PlayVideo()
     def run(self):
         
         
@@ -116,12 +115,20 @@ class TfSpeechCommand():
             data0 = np.frombuffer(in_data, dtype='int16')
             
             # append data from buffer to data
-            self.data = np.append(self.data,data0)
-            if len(self.data) > self.feed_samples:
+            self.voice_activate.data = np.append(self.voice_activate.data,data0)
+
+            if len(self.voice_activate.data) > self.voice_activate.feed_samples:
                 # remove the old data
-                self.data = self.data[-self.feed_samples:]
+                self.voice_activate.data = self.voice_activate.data[-self.voice_activate.feed_samples:]
                 # Process data async by sending a queue.
-                self.q.put(self.data)
+                self.voice_activate.q.put(self.voice_activate.data)
+            if self.new_trigger:
+                self.voice_control.data = np.append(self.voice_control.data, data0)
+                if len(self.voice_control.data) > self.voice_control.feed_samples:
+                    # remove the old data
+                    self.voice_control.data = self.voice_control.data[-self.voice_control.feed_samples:]
+                    # Process data async by sending a queue.
+                    self.voice_control.q.put(self.voice_control.data)
             return (in_data, pyaudio.paContinue)
         
         # set up the portaudio system.
@@ -137,62 +144,71 @@ class TfSpeechCommand():
             rate=self.device_sample_rate,
             frames_per_buffer=self.chunk_samples,
             stream_callback=audio_callback)
+    
+        control_list, channel_list = self.run_vd.setDefaultList()
         
-        
-        # the number of predictions in a feed_duration
-        size_predicts = int(self.feed_duration / self.chunk_duration)
-        
-        # the array contains the predictions 
-        activate_predictions = np.zeros([size_predicts])
-        control_predictions = np.zeros([size_predicts])
-        
+        self.run_vd.settings()
+
         try:
             
             while self.stream:
+                data = self.voice_activate.q.get()
+                preds = self.voice_activate.predictFrames(data)
+
+                self.new_trigger = self.voice_activate.has_new_triggerword(preds)    
                 
-                
-                # compute activate_predictions in a feed_duration
-                for i in range(size_predicts):
-                    data = self.q.get()
-                    activate_predictions[i] = self.voice_activate.predict(data)
-                
-                # get best precision and key of word 
-                activate_precision, keymax_activate_predictions = self.getBestPredict(activate_predictions, size_predicts)
-                
-                # if best_precision is greater then threshold for activate word and keymax = 2 - word = marvin
-                logging.info("Listening")
-                if(activate_precision >= self.activate_threshold and keymax_activate_predictions == 2):
-                    logging.info("HI SIR!")
-                    
-                    message = (time.strftime("%Y-%m-%d %H:%M:%S: ", 
-                                            time.localtime(time.time())) + 
-                                            self.voice_activate.labels[int(keymax_activate_predictions)] +
-                                            "(p: %0.2f)"% (activate_precision))
+                if self.new_trigger:
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.voice_activate.labels[1]
                     logging.info(message)
-                    
-                    # set timeout for the process predicting the control word 
+
+                    #self.new_trigger = False
+
+                    self.voice_activate.q.queue.clear()
+
+                    # set timeout for the process predicting the control word
+                    #time.sleep(3) 
                     timeout = time.time() + self.control_time
+
+
                     while True:
-                        
-                        # compute activate_predictions in a feed_duration
-                        for i in range(size_predicts):
-                            data = self.q.get()
-                            control_predictions[i] = self.voice_control.predict(data)
-                            
-                        # get best precision and key of word
-                        control_precision, keymax_control_predictions = self.getBestPredict(control_predictions, size_predicts)
-                        
-                        
-                        if(control_precision >= self.control_threshold):
-                            message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
-                                                                                                 self.voice_control.labels[int(keymax_control_predictions)] + 
-                                                                                                 "(p: %0.2f)"% (control_precision))
-                        else:
-                            message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
-                                                                                                 self.voice_control.labels[1])
+                        data = self.voice_control.q.get()
+                        control_predicted_label = self.voice_control.predict(data)
+
+                        new_keyword = self.voice_control.has_new_keyword(control_predicted_label)
+                        message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
+                                                                                            self.voice_control.labels[control_predicted_label])
                         logging.info(message)
-                        if time.time() > timeout:
+
+                        if new_keyword:
+                            
+                            current_channel = self.run_vd.getIndexChannel(channel_list)
+                            
+                            
+                            control_list, channel_list = self.run_vd.setControlList(control_list, channel_list, control_predicted_label)
+                            
+                            new_channel = self.run_vd.getIndexChannel(channel_list)
+                            logging.info("channel: " + str(new_channel))
+                            
+                            if control_list[1] == 1:
+                                self.run_vd.stopPlayVideo()
+                            elif (current_channel != new_channel and control_list[0] == 1):
+                                self.run_vd.stopPlayVideo()
+                                self.run_vd.setChannel(new_channel)
+                                
+                                self.run_vd.setConfig()
+                                self.run_vd.startPlayVideo()
+                            
+                            self.voice_control.q.queue.clear()
                             break
+                            
+
+                        if time.time() > timeout:
+                            self.voice_control.q.queue.clear()
+                            break
+
+                else:
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.voice_activate.labels[0] 
+                    logging.info(message)
 
                         
         except (KeyboardInterrupt, SystemExit):
@@ -205,18 +221,6 @@ class TfSpeechCommand():
             self.audio.terminate()
     
     
-    def getBestPredict(self, predictions, size_predicts):
-        
-        # count the number of each object return a dict
-        counter_predictions = collections.Counter(predictions)
-        
-        # get key of the object with max the number of occurrences
-        keymax_predictions = max(counter_predictions, key = counter_predictions.get)
-        
-        # compute precision
-        precision = counter_predictions[keymax_predictions] / size_predicts
-        
-        return precision, keymax_predictions
 
 
 

@@ -186,7 +186,13 @@ class StreamControl():
         except(AssertionError):
             self.stream = False            
             return -1          
-        
+    
+    def has_new_keyword(self, predicted_labels):
+        if predicted_labels >= 2:
+            return True
+        else:
+            return False
+
     def load_model(self):
         # load json and create model
         json_file = open(self.path_model + '/' +  self.name_model, 'r')

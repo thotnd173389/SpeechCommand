@@ -27,11 +27,11 @@ from scipy import signal
 
 class StreamActivate():
     def __init__(self, 
-                 path_model = './model/keyword_marvin_v3/non_stream', 
+                 path_model = './model/keyword_marvin_v2/non_stream', 
                  name_model = 'model_non_stream.json', 
                  sample_rate = 16000,
-                 chunk_duration = 0.25,
-                 feed_duration = 1.0,
+                 chunk_duration = 0.8,
+                 feed_duration = 3.0,
                  channels = 1,
                  threshold = 0.7,
                  pause = False):
@@ -74,6 +74,8 @@ class StreamActivate():
         self.chunk_samples = int(self.device_sample_rate * self.chunk_duration)
         self.feed_samples = int(self.device_sample_rate * self.feed_duration)
         
+        logging.info('chunk samples: ' + str(self.chunk_samples))
+        logging.info('feed_samples:' + str(self.feed_samples))
         
         
         # Queue to communiate between the audio callback and main thread
@@ -126,38 +128,26 @@ class StreamActivate():
             rate=self.device_sample_rate,
             frames_per_buffer=self.chunk_samples,
             stream_callback=audio_callback)
-                   
-        size_predicts = int(int(self.feed_duration / self.chunk_duration))
-        predictions = np.zeros([size_predicts])
+        
+
         
         try: 
             while self.stream:
                 
-                    
-                current_time = time.time()
+                
                                 
-                for i in range(size_predicts):
-                    data = self.q.get()
-                    predictions[i] = self.predict(data)
-                    
-                counter_predictions = collections.Counter(predictions)
+                data = self.q.get()
+                print(data.shape)
+                preds = self.predictFrames(data)
+
+                new_trigger = self.has_new_triggerword(preds)    
                 
-                predictions[:size_predicts] = 0
-                
-                keymax_predictions = max(counter_predictions, key = counter_predictions.get)
-                
-                precision = counter_predictions[keymax_predictions] / size_predicts
-                
-                if(precision >= self.threshold):
-                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[int(keymax_predictions)] + "(p: %0.2f)"% (precision)
+                if new_trigger:
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[1]
                 else:
-                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[1] 
+                    message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.labels[0] 
                 logging.info(message)
-                
-                lastprocessing_time = time.time()
-                remain_time = lastprocessing_time - current_time
-                if(remain_time < self.feed_duration):
-                    time.sleep(remain_time)                
+                           
                        
         except (KeyboardInterrupt, SystemExit):
         
@@ -175,8 +165,9 @@ class StreamActivate():
         try:
             data = np.array(data, np.float32)
             data = np.expand_dims(data, axis = 0)
-            
+            logging.info(data.shape)
             data = signal.resample(data, self.sample_rate, axis = 1)
+            logging.info(data.shape)
             
             assert data.shape == (1, 16000)
             # Normalize short ints to floats in range [-1..1).
@@ -191,7 +182,42 @@ class StreamActivate():
             
         except(AssertionError):
             self.stream = False            
-            return -1    
+            return -1
+    
+
+    def predictFrames(self, data):
+        
+        
+        data = np.array(data, np.float32)
+        data = np.expand_dims(data, axis = 0)
+        data = signal.resample(data, self.sample_rate * int(self.feed_duration), axis = 1)
+
+        assert data.shape == (1, 48000)
+
+        predictions = self.model.predict(data) > self.threshold
+        
+        return predictions.reshape(-1)
+
+
+
+    def has_new_triggerword(self,predictions):
+
+        chunk_predictions_sample = int(len(predictions) * self.chunk_duration / self.feed_duration)
+
+        chunk_predictions = predictions[-chunk_predictions_sample:]
+        
+        level = chunk_predictions[0]
+
+
+        logging.info(level)
+
+        for pred in chunk_predictions:
+            if pred > level:
+                return True
+            else:
+                level = pred
+
+        return False
 
     def load_model(self):
         # load json and create model
