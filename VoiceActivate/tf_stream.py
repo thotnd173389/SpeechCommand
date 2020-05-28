@@ -137,7 +137,6 @@ class StreamActivate():
                 
                                 
                 data = self.q.get()
-                print(data.shape)
                 preds = self.predictFrames(data)
 
                 new_trigger = self.has_new_triggerword(preds)    
@@ -165,13 +164,10 @@ class StreamActivate():
         try:
             data = np.array(data, np.float32)
             data = np.expand_dims(data, axis = 0)
-            logging.info(data.shape)
+
             data = signal.resample(data, self.sample_rate, axis = 1)
-            logging.info(data.shape)
             
             assert data.shape == (1, 16000)
-            # Normalize short ints to floats in range [-1..1).
-            #data = data / float(np.max(np.absolute(data)))
             data = np.array(data, np.float32) / 32768.0
             
             predictions = self.model(data)
@@ -207,9 +203,6 @@ class StreamActivate():
         chunk_predictions = predictions[-chunk_predictions_sample:]
         
         level = chunk_predictions[0]
-
-
-        logging.info(level)
 
         for pred in chunk_predictions:
             if pred > level:
