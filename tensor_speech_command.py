@@ -7,15 +7,13 @@ Created on Tue May 12 20:10:00 2020
 """
 
 
-from queue import Queue
+import os
 import numpy as np
 import logging
 import pyaudio
 import time
-import collections
 from VoiceActivate.tf_stream import StreamActivate
 from VoiceControl.tf_stream import StreamControl
-import tensorflow as tf
 from play_video import PlayVideo
 from play_video import PlayAudio
 
@@ -25,7 +23,7 @@ class TfSpeechCommand():
                  path_activate_model = './VoiceActivate/model/keyword_marvin_v5/non_stream',
                  path_control_model = './VoiceControl/model/E2E_1stage_v8_vl_0_4/non_stream', 
                  sample_rate = 16000,
-                 chunk_duration = 0.8,
+                 chunk_duration = 0.6,
                  activate_feed_duration = 3.0,
                  control_feed_duration = 1.0,
                  channels = 1,
@@ -124,13 +122,6 @@ class TfSpeechCommand():
                 self.voice_activate.data = self.voice_activate.data[-self.voice_activate.feed_samples:]
                 # Process data async by sending a queue.
                 self.voice_activate.q.put(self.voice_activate.data)
-            if self.new_trigger:
-                self.voice_control.data = np.append(self.voice_control.data, data0)
-                if len(self.voice_control.data) > self.voice_control.feed_samples:
-                    # remove the old data
-                    self.voice_control.data = self.voice_control.data[-self.voice_control.feed_samples:]
-                    # Process data async by sending a queue.
-                    self.voice_control.q.put(self.voice_control.data)
             return (in_data, pyaudio.paContinue)
         
         # set up the portaudio system.
@@ -173,10 +164,14 @@ class TfSpeechCommand():
 
 
                     while True:
-                        data = self.voice_control.q.get()
-                        control_predicted_label = self.voice_control.predict(data)
+                        data = self.voice_activate.q.get()
+                        
+                        data_split = data[-self.voice_control.feed_samples:]
+                        
+                        control_predicted_label = self.voice_control.predict(data_split)
 
                         new_keyword = self.voice_control.has_new_keyword(control_predicted_label)
+                        
                         message = (time.strftime("%Y-%m-%d %H:%M:%S:                      ", time.localtime(time.time())) + 
                                                                                             self.voice_control.labels[control_predicted_label])
                         logging.info(message)
@@ -184,6 +179,7 @@ class TfSpeechCommand():
                         if new_keyword:
                             
                             self.play_control_sound.play_audio()
+                            
                             current_channel = self.run_vd.getIndexChannel(channel_list)
                             
                             prev_control_status = control_list[0]
@@ -208,12 +204,12 @@ class TfSpeechCommand():
                                 self.run_vd.setConfig(enable_fullscreen = True)
                                 self.run_vd.startPlayVideo()
                             
-                            self.voice_control.q.queue.clear()
+                            
                             break
                             
 
                         if time.time() > timeout:
-                            self.voice_control.q.queue.clear()
+                            
                             break
 
                 else:
@@ -229,6 +225,8 @@ class TfSpeechCommand():
             
             # Terminate the PortAudio interface
             self.audio.terminate()
+            
+            #os.system('systemctl reboot -i')
     
     
 
