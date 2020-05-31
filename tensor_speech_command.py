@@ -17,7 +17,7 @@ from VoiceActivate.tf_stream import StreamActivate
 from VoiceControl.tf_stream import StreamControl
 import tensorflow as tf
 from play_video import PlayVideo
-
+from play_video import PlayAudio
 
 
 class TfSpeechCommand():
@@ -105,6 +105,8 @@ class TfSpeechCommand():
         self.new_trigger = False
 
         self.run_vd = PlayVideo()
+        self.play_activate_sound = PlayAudio(path_audio = './audio/activate_0.mp3') 
+        self.play_control_sound = PlayAudio(path_audio = './audio/control_0.mp3')
     def run(self):
         
         
@@ -158,15 +160,15 @@ class TfSpeechCommand():
                 self.new_trigger = self.voice_activate.has_new_triggerword(preds)    
                 
                 if self.new_trigger:
+                    self.play_activate_sound.play_audio()
                     message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.voice_activate.labels[1]
                     logging.info(message)
 
-                    #self.new_trigger = False
 
                     self.voice_activate.q.queue.clear()
 
                     # set timeout for the process predicting the control word
-                    #time.sleep(3) 
+
                     timeout = time.time() + self.control_time
 
 
@@ -181,6 +183,7 @@ class TfSpeechCommand():
 
                         if new_keyword:
                             
+                            self.play_control_sound.play_audio()
                             current_channel = self.run_vd.getIndexChannel(channel_list)
                             
                             prev_control_status = control_list[0]

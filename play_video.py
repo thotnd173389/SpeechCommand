@@ -6,6 +6,7 @@ Created on Sat May 23 10:07:50 2020
 @author: thorius
 """
 import vlc
+import time
 import logging
 
 
@@ -50,6 +51,14 @@ class PlayVideo():
         
     def stopPlayVideo(self):
         self.media_player.stop()
+
+
+    def mute(self):
+        self.media_player.audio_set_volume(0)
+
+        
+    def unMute(self):
+        self.media_player.audio_set_volume(50)
         
         
     def setControlList(self, control_list, channel_list, keymax_control_predictions):
@@ -91,7 +100,20 @@ class PlayVideo():
         return control_list, channel_list
         
         
-            
+class PlayAudio():
+    def __init__(self, path_audio = './audio/activate_0.wav'):
+        self.path_audio = path_audio
+        self.player = vlc.MediaPlayer(self.path_audio)
+    
+    def play_audio(self):
+        self.player.play()
+        time.sleep(1)
+        self.player.stop()
+
+
+    def stop_audio(self):
+        self.player.stop()
+
             
 if __name__ == '__main__':
     py_vd = PlayVideo()
