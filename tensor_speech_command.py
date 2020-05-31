@@ -22,7 +22,7 @@ from play_video import PlayAudio
 
 class TfSpeechCommand():
     def __init__(self,
-                 path_activate_model = './VoiceActivate/model/keyword_marvin_v2/non_stream',
+                 path_activate_model = './VoiceActivate/model/keyword_marvin_v5/non_stream',
                  path_control_model = './VoiceControl/model/E2E_1stage_v8_vl_0_4/non_stream', 
                  sample_rate = 16000,
                  chunk_duration = 0.8,
@@ -205,7 +205,7 @@ class TfSpeechCommand():
                                 else:
                                     break
                                 
-                                self.run_vd.setConfig()
+                                self.run_vd.setConfig(enable_fullscreen = True)
                                 self.run_vd.startPlayVideo()
                             
                             self.voice_control.q.queue.clear()
