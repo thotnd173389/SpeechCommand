@@ -16,6 +16,7 @@ from VoiceActivate.tf_stream import StreamActivate
 from VoiceControl.tf_stream import StreamControl
 from play_video import PlayVideo
 from play_video import PlayAudio
+from play_tv import *
 
 
 class TfSpeechCommand():
@@ -151,7 +152,7 @@ class TfSpeechCommand():
                 self.new_trigger = self.voice_activate.has_new_triggerword(preds)    
                 
                 if self.new_trigger:
-                    self.play_activate_sound.play_audio()
+                    self.play_activate_sound.play_audio() #am thanh canh bao
                     message = time.strftime("%Y-%m-%d %H:%M:%S: ", time.localtime(time.time())) + self.voice_activate.labels[1]
                     logging.info(message)
 
@@ -178,7 +179,13 @@ class TfSpeechCommand():
 
                         if new_keyword:
                             
-                            self.play_control_sound.play_audio()
+                            button = label_to_button(control_predicted_label)
+                            
+                            ir_send(button)
+                            
+                            
+                            """
+                            self.play_control_sound.play_audio() #am thanh canh bao
                             
                             current_channel = self.run_vd.getIndexChannel(channel_list)
                             
@@ -204,6 +211,7 @@ class TfSpeechCommand():
                                 self.run_vd.setConfig(enable_fullscreen = True)
                                 self.run_vd.startPlayVideo()
                             
+                            """
                             
                             break
                             
