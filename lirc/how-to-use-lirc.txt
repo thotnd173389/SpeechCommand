@@ -1,0 +1,41 @@
+# Setup lirc:
+$ sudo apt-get install lirc
+
+# Test ir received:
+1. Open terminal as root and change /boot/config.txt
+$ sudo -i
+$ sudo nano /boot/config.txt
+2. Add "#" before line: #dtoverlay=gpio-ir-tx,gpio_pin=18 (disable ir transmit)
+3. Reboot
+$ sudo reboot
+4. Open terminal and type:
+$ mode2 -d /dev/lirc0
+Then, you can press any button on your remote, you can see one thing like this:
+space 1677215
+pulse 298
+space 1788
+pulse 302
+... 
+
+# Check list namespace you can use:
+$ irrecord --list-namespace
+Note: you can't use names without list namespace 
+
+# Save ir signal to file:
+1. Stop lircd services
+$ sudo systemctl stop lircd
+2. Record ir code, do step by step follow the instructions
+$ irrecord -f -d /dev/lirc0 ~/lircd.conf
+Note: After recording, check file *.licrd.conf in /home/pi
+3. Backup current file lircd.conf and copying new file *.licrd.conf:
+$ sudo cp /etc/lirc/lircd.conf /etc/lirc/lircd_backup.conf
+$ sudo cp ~/*.licrd.conf /etc/lirc/lircd.conf
+
+# Check ir transmitted:
+1. Open terminal as root and change /boot/config.txt
+$ sudo -i
+$ sudo nano /boot/config.txt
+2. Remove "#" before line: dtoverlay=gpio-ir-tx,gpio_pin=18 (enable ir transmit)
+3. Reboot
+$ sudo reboot
+4. Open terminal and type: 
