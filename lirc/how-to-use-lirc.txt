@@ -39,3 +39,6 @@ $ sudo nano /boot/config.txt
 3. Reboot
 $ sudo reboot
 4. Open terminal and type: 
+$ irsend SEND_ONCE NAME_REMOTE KEY_OK
+Note: You can get the name of remote in file lircd.conf
+
